@@ -273,10 +273,10 @@ func FormatStorage(storage int64, code string) (string, error) {
 	return FormatMinor(m, code)
 }
 
-// FormatStorage storage → 主单位字符串。超精度按银行家舍入到 ISO minor。
+// RoundToStorage storage → 主单位字符串。超精度按银行家舍入到 ISO minor。
 //
-//	USD 1_003_400 → "100.34"
-//	USD 1_003_460 → "100.35"
+//	USD 1_003_400 → "1003400"
+//	USD 1_003_460 → "1003500"
 func RoundToStorage(storage int64, code string) (int64, error) {
 	m, err := StorageToMinorBanker(storage, code)
 	if err != nil {
