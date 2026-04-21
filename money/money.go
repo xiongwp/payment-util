@@ -5,11 +5,12 @@
 //   - storage = minor_units × StorageScale（= 100，跨币种恒定）
 //
 // 例：
-//   PHP 100.00 → minor_units=10000   → storage=1_000_000   → Display="₱100.00"
-//   USD 100.34 → minor_units=10034   → storage=1_003_400   → Display="$100.34"
-//   USD 100.346 → 已超 ISO 精度       → storage=1_003_460   → Display="$100.35"  (银行家舍入)
-//   JPY 100    → minor_units=100     → storage=10_000      → Display="¥100"
-//   KWD 1.000  → minor_units=1000    → storage=100_000     → Display="KD1.000"
+//
+//	PHP 100.00 → minor_units=10000   → storage=1_000_000   → Display="₱100.00"
+//	USD 100.34 → minor_units=10034   → storage=1_003_400   → Display="$100.34"
+//	USD 100.346 → 已超 ISO 精度       → storage=1_003_460   → Display="$100.35"  (银行家舍入)
+//	JPY 100    → minor_units=100     → storage=10_000      → Display="¥100"
+//	KWD 1.000  → minor_units=1000    → storage=100_000     → Display="KD1.000"
 //
 // Display / FormatStorage 对超精度部分用 round-half-to-even（银行家舍入）；
 // StorageToMinor 仍然严格，余数非零会报错——给账务路径用，避免吞掉零头。
@@ -188,11 +189,12 @@ func StorageToMinor(storage int64, code string) (int64, error) {
 
 // StorageToMinorBanker storage → minor_units，超出 ISO 精度的余数按银行家舍入
 // （round half to even）：>0.5 进位、<0.5 截掉、==0.5 朝偶数靠。
-//   1003440 → 10034   (.4 < .5)
-//   1003460 → 10035   (.6 > .5)
-//   1003450 → 10034   (.5 → 偶数 4，不动)
-//   1003550 → 10036   (.5 → 偶数 6，进位)
-//   -1003460 → -10035 (符号对称)
+//
+//	1003440 → 10034   (.4 < .5)
+//	1003460 → 10035   (.6 > .5)
+//	1003450 → 10034   (.5 → 偶数 4，不动)
+//	1003550 → 10036   (.5 → 偶数 6，进位)
+//	-1003460 → -10035 (符号对称)
 func StorageToMinorBanker(storage int64, code string) (int64, error) {
 	if !IsSupported(code) {
 		return 0, fmt.Errorf("money: unknown currency %q", code)
@@ -232,10 +234,11 @@ func Symbol(code string) string {
 }
 
 // FormatMinor minor_units → 主单位字符串，按 ISO 小数位补零。
-//   USD 10034 → "100.34"
-//   JPY 100   → "100"
-//   KWD 1500  → "1.500"
-//   USD -25   → "-0.25"
+//
+//	USD 10034 → "100.34"
+//	JPY 100   → "100"
+//	KWD 1500  → "1.500"
+//	USD -25   → "-0.25"
 func FormatMinor(minorUnits int64, code string) (string, error) {
 	p, err := Precision(code)
 	if err != nil {
@@ -259,8 +262,9 @@ func FormatMinor(minorUnits int64, code string) (string, error) {
 }
 
 // FormatStorage storage → 主单位字符串。超精度按银行家舍入到 ISO minor。
-//   USD 1_003_400 → "100.34"
-//   USD 1_003_460 → "100.35"
+//
+//	USD 1_003_400 → "100.34"
+//	USD 1_003_460 → "100.35"
 func FormatStorage(storage int64, code string) (string, error) {
 	m, err := StorageToMinorBanker(storage, code)
 	if err != nil {
@@ -269,14 +273,27 @@ func FormatStorage(storage int64, code string) (string, error) {
 	return FormatMinor(m, code)
 }
 
+// FormatStorage storage → 主单位字符串。超精度按银行家舍入到 ISO minor。
+//
+//	USD 1_003_400 → "100.34"
+//	USD 1_003_460 → "100.35"
+func RoundToStorage(storage int64, code string) (int64, error) {
+	m, err := StorageToMinorBanker(storage, code)
+	if err != nil {
+		return 0, err
+	}
+	return m * StorageScale, nil
+}
+
 // Display storage → 带币种符号的人类可读金额。给 ledger/admin UI/收据用。
-//   USD 1_003_400 → "$100.34"
-//   USD 1_003_460 → "$100.35"   (banker)
-//   USD 1_003_450 → "$100.34"   (banker：偶数侧)
-//   USD 1_003_550 → "$100.36"   (banker：偶数侧)
-//   JPY 10_000    → "¥100"
-//   KWD 150_000   → "KD1.000"
-//   未登记币种    → "XYZ 100.00"
+//
+//	USD 1_003_400 → "$100.34"
+//	USD 1_003_460 → "$100.35"   (banker)
+//	USD 1_003_450 → "$100.34"   (banker：偶数侧)
+//	USD 1_003_550 → "$100.36"   (banker：偶数侧)
+//	JPY 10_000    → "¥100"
+//	KWD 150_000   → "KD1.000"
+//	未登记币种    → "XYZ 100.00"
 func Display(storage int64, code string) (string, error) {
 	s, err := FormatStorage(storage, code)
 	if err != nil {
