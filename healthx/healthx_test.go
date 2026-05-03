@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLiveness_AlwaysOK(t *testing.T) {
@@ -74,4 +75,52 @@ func TestReadiness_NoProbesPass(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
+}
+
+// 稳定性回归：probe 内 panic 不能让 Readiness handler 挂死。
+// 之前 goroutine panic 时 channel 没被 send，主循环 <-ch 永远阻塞。
+func TestReadiness_PanicInProbe_StillResponds(t *testing.T) {
+	panicy := ProbeFunc{
+		N: "panicy",
+		F: func(_ context.Context) error {
+			panic("simulated probe panic")
+		},
+	}
+	healthy := ProbeFunc{
+		N: "healthy",
+		F: func(_ context.Context) error { return nil },
+	}
+	h := Readiness(panicy, healthy)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+
+	done := make(chan struct{})
+	go func() {
+		h(rec, req)
+		close(done)
+	}()
+	select {
+	case <-done:
+		// good - handler returned within reasonable time
+	case <-time.After(5 * time.Second):
+		t.Fatal("Readiness handler hung when probe panicked (regression: goroutine 没 recover)")
+	}
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503 (one probe panicked = fail), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !contains(body, "panicy") || !contains(body, "panic") {
+		t.Errorf("response should mention the panicky probe, got: %s", body)
+	}
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
 }

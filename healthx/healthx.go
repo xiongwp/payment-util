@@ -21,6 +21,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -78,17 +79,27 @@ func Readiness(probes ...Probe) http.HandlerFunc {
 		for _, p := range probes {
 			p := p
 			go func() {
+				// 稳定性：probe 内 panic 时一定要发送 result 到 channel，否则
+				// 主循环的 <-ch 计数永远等不到这一条 → handler 挂死、goroutine
+				// leak、K8s readiness 探针超时。defer recover 把 panic 转成
+				// failed result。
+				var res result
+				defer func() {
+					if rec := recover(); rec != nil {
+						res = result{Err: fmt.Sprintf("probe panic: %v", rec)}
+					}
+					ch <- struct {
+						name string
+						res  result
+					}{p.Name(), res}
+				}()
 				pCtx, pCancel := context.WithTimeout(ctx, probeBudget)
 				defer pCancel()
 				err := p.Check(pCtx)
-				r := result{OK: err == nil}
+				res = result{OK: err == nil}
 				if err != nil {
-					r.Err = err.Error()
+					res.Err = err.Error()
 				}
-				ch <- struct {
-					name string
-					res  result
-				}{p.Name(), r}
 			}()
 		}
 		ok := true
